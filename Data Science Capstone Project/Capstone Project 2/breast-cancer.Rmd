@@ -1,0 +1,1042 @@
+---
+title: "** Breast Cancer Diagnosys Prediction **"
+subtitle: 'Harvard Data Science Capstone Project for Breast Cancer Prediction'
+author: " Amol Chaudhari "
+date: "22/06/2025"
+output:
+  pdf_document:
+    df_print: kable
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+    fig_caption: yes
+    extra_dependencies: "subfig"
+    includes:
+      in_header: preamble.tex
+  html_document: default
+bibliography: references.bib
+fontsize: 11pt
+include-before: '`\newpage{}`{=latex}'
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+# Run knitr chunk options
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.align="center", out.width="70%")
+
+# Open required package libraries
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(dplyr)) install.packages("dplyr", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+if(!require(lubridate)) install.packages("lubridate", repos = "http://cran.us.r-project.org")
+if(!require(stringr)) install.packages("stringr", repos = "http://cran.us.r-project.org")
+if(!require(ggplot2)) install.packages("ggplot2", repos = "http://cran.us.r-project.org")
+if(!require(ggdendro)) install.packages("ggdendro", repos = "http://cran.us.r-project.org")
+if(!require(dendextend)) install.packages("dendextend", repos = "http://cran.us.r-project.org")
+if(!require(knitr)) install.packages("knitr", repos = "http://cran.us.r-project.org")
+if(!require(kableExtra)) install.packages("kableExtra", repos = "http://cran.us.r-project.org")
+if(!require(scales)) install.packages("scales", repos = "http://cran.us.r-project.org")
+if(!require(matrixStats)) install.packages("matrixStats", repos = "http://cran.us.r-project.org")
+if(!require(RColorBrewer)) install.packages("RColorBrewer", repos = "http://cran.us.r-project.org")
+if(!require(xfun)) install.packages("xfun", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", dependencies = c("Depends", "Suggests"), repos = "http://cran.us.r-project.org")
+
+# Set all numeric outputs to 3 digits (unless otherwise specified in code chunks)
+options(digits = 3)
+
+# Download data-set containing both features and outcome data
+data_url <- "http://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/wdbc.data"
+
+# Download data-set description as a 
+names_url <- "http://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/wdbc.names"
+
+# download data and save to data.frame
+wdbc_data <- fread(data_url)
+
+# add column names based on information provided in WPBC.names text file
+column_names <- c("id", "diagnosis", "radius_m", "texture_m", "perimeter_m", "area_m", "smoothness_m", "compactness_m",
+           "concavity_m", "concave_points_m", "symmetry_m", "fractal_dim_m", "radius_se", "texture_se", "perimeter_se", 
+           "area_se", "smoothness_se", "compactness_se", "concavity_se", "concave_points_se", "symmetry_se",
+           "fractal_dim_se", "radius_w", "texture_w", "perimeter_w", "area_w", "smoothness_w", "compactness_w",
+           "concavity_w", "concave_points_w", "symmetry_w", "fractal_dim_w")
+
+colnames(wdbc_data) <- column_names
+
+# Create plot theme to apply to ggplot2 element text throughout report
+plot_theme <- theme(plot.caption = element_text(size = 12, face = "italic"), axis.title = element_text(size = 12))
+```
+\newpage
+
+# **Introduction** 
+
+Cancer is the second biggest cause of death globally, with an estimated 9.6 million deaths in 2018 [@bray_2018]. The incidence of new cancer cases was estimated at 18 million in 2018 [@bray_2018] and, based on current trends, is projected to increase to approximately 28 million by 2040 [@cruk_2019]. In women, breast cancer is the most commonly diagnosed cancer and the leading cause of cancer mortality [@bray_2018].
+
+Despite increasing mortality rates globally [@gbd2015_2016], survival rates have improved in high income countries such as the United Kingdom [@nuffieldtrust_2020] largely due to improvements made in detection and early diagnosis as well as in the treatment and management of the disease [@coleman_2010; @walters_2013].
+
+Breast cancer screening programmes have been introduced in countries such as the UK in order to improve detection and early diagnosis and have been shown to improve breast cancer mortality [@marmot_2013] but remain controversial not least because they can drive over-diagnosis and unnecessary biopsy and/or treatment [@nehmat_nehmat_2017]. Regardless, the use of screening to drive earlier diagnosis certainly places even greater emphasis on the ability to diagnose early signs of malignancy via biopsy accurately [@vetto_1995; @ginsburg_2020].
+
+Fine needle aspiration (FNA) is a type of biopsy that remains a popular procedure for diagnosing breast cancer because it is relatively non-invasive, inexpensive and simple to administer [@Lukasiewicz_2017] despite continued controversy because of the small amount of breast tissue that is sampled that can be inadequate for accurate diagnosis [@casaubon_2020], resulting in substantially lower sensitivity, specificity and reproducibility versus the more invasive core needle biopsy procedure [@Lukasiewicz_2017]. False negatives result in underdiagnosis and increases mortality risk while false positives result in overdiagnosis and risk of exposure to unnecessary treatments. A review of the literature on studies of core biopsies specifically in breast cancer found false negative rates ranging from 0% to 13% based on expert assessment by pathologists [@dillon_2005]. Machine learning algorithms thus have a high bar to be considered of clinical utility as an alternative to this expert evaluation by pathologists.
+
+The Wisconsin breast cancer (diagnostic) database is a set of labelled multivariate data that has been used for classification based machine learning many times since it was first used in the 1990s [@street_1993; @wolberg_1994; @wolberg_1995] and subsequently donated to the UCI machine learning repository [@Dua_2019]. The objective of this project was to use this data set to train different algorithms in order to accurately diagnosis breast cancer based on a prediction as to whether a given sample of cells was from a malignant (cancerous) or benign (non-cancerous) tumour mass.
+
+This report sets out the exploratory analysis of the data including the relationship between samples, and features, followed by an overview of the different methods deployed to develop predictive algorithms, including both unsupervised and supervised learning techniques. The results are presented before a discussion on the relative performance of the models, the limitations of the models as well as the data itself, and opportunities for future work.
+
+The report was compiled using R Markdown in [RStudio](https://rstudio.com/products/rstudio/), an integrated development environment for programming in R, a language and software environment for statistical computing.
+
+\newpage
+
+# **Exploratory Analysis**
+
+## Data set overview
+
+The Breast Cancer Wisconsin (Diagnostic) data set was downloaded from the UCI machine learning repository [@Dua_2019]. It is a `r class(wdbc_data)` consisting of `r ncol(wdbc_data)` columns and `r nrow(wdbc_data)` rows. The first and second columns provide the ID number and diagnosis for each patient respectively. 
+
+There are `r n_distinct(wdbc_data$id)` unique patient ID numbers, confirming that each row represents a sample from a unique patient. The diagnosis column includes `r class(wdbc_data$diagnosis)` strings that classify whether the samples were diagnosed as benign (B) or malignant (M). The data set consists of `r sum(wdbc_data$diagnosis=="B")` (`r percent(mean(wdbc_data$diagnosis=="B"))`) benign samples and `r sum(wdbc_data$diagnosis=="M")` (`r percent(mean(wdbc_data$diagnosis=="M"))`) malignant samples.
+
+This imbalance between benign and malignant samples means that overall accuracy is likely not to be a sufficient measure of a predictive algorithm in isolation as it may mask the false negative rate, or type II error, i.e. the proportion of malignant samples misdiagnosed as benign. As such, examination of the confusion matrix, and the sensitivity or recall in particular, is critical during model development.
+
+The remaining columns include numeric data on the features computed from digitised samples of breast mass extracted via FNA, using techniques for interactive image processing [@street_1993]. The data include the mean (m), worst (w) and standard error (se) for each of the 10 features described in Table 1 and in more detail by Street, Wolberg and Mangasarian [-@street_1993].
+
+```{r features-list}
+# Extract unique features from column names object using stringr functions
+features <- column_names[-c(1,2)] %>% str_replace("[^_]+$", "") %>% unique() %>% str_replace_all("_", " ") %>% str_to_title()
+
+# Create data.frame with descriptions for each of the unique features
+features_list <- data.frame(Feature = features, Description = 
+                              c("Mean of distances from center to points on the perimeter of individual nuclei",
+                                "Variance (standard deviation) of grey-scale intensitities in the component pixels",
+                                "Perimeter length of each nucleus",
+                                "Area as measured by counting pixels within each nucleus",
+                                "Local variation in radius lengths",
+                                "Combination of perimeter and area using the formula: (perimeter^2 / area - 1.0)",
+                                "Number and severity of concavities (indentations) in the nuclear contour",
+                                "Number of concavities in the nuclear contour",
+                                "Symmetry of the nuclei as measured by length differences between lines perpendicular to the major axis and the cell boundary",
+                                "Fractal dimension based on the 'coastline approximation' - 1.0"))
+
+# Format data.frame using kable package
+features_list %>%
+  kable(caption = "Description of nuclear features", align = 'll', booktabs = T,
+        format = "latex", linesep = "") %>%
+  kable_styling(full_width = FALSE, position = "center", latex_options = c("scale_down", "hold_position"))
+```
+
+Each of the features described are such that larger values will typically indicate a higher likelihood of malignancy given that they reflect larger cells and/or more irregular shapes. 
+
+Tables 2-4 summarise the numeric data for each of the features included in the data set, showing clearly that the range and magnitude of values for each feature varies considerably and would benefit from normalisation (centering and scaling) prior to further visualisation and use in developing predictive algorithms.
+
+```{r feature-mean-summary}
+# Create table showing summary data for the mean scores for each of the ten features
+summary(wdbc_data[,3:12]) %>%
+  kable(caption = "Mean scores", booktabs = T,
+        format = "latex", linesep = "") %>%
+  kable_styling(position = "center", latex_options = c("scale_down"))
+```
+```{r feature-worst-summary}
+# Create table showing summary data for the worst scores for each of the ten features
+summary(wdbc_data[,23:32]) %>%
+  kable(caption = "Worst scores", booktabs = T,
+        format = "latex", linesep = "") %>%
+  kable_styling(position = "center", latex_options = c("scale_down"))
+```
+```{r feature-se-summary}
+# Create table showing summary data for the standard error scores for each of the ten features
+summary(wdbc_data[,13:22]) %>%
+  kable(caption = "Standard error scores", booktabs = T,
+        format = "latex", linesep = "") %>%
+  kable_styling(position = "center", latex_options = c("scale_down"))
+```
+
+Figure 1 provides a facet wrap of density plots for each of the features grouped by diagnosis. The axes have been omitted to simplify the figure. This data visualisation makes it clear that (a) the data are relatively normally distributed and don't require transformation, (b) malignant samples are, on average, larger in size and more abnormal in shape, than benign samples and (c) malignant samples have a greater variance in data than benign samples.
+
+```{r feature-distribution, fig.height = 10, out.width= "80%", fig.cap="Feature density plots by diagnosis"}
+
+# Plot and facet wrap density plots for each feature by diagnosis
+wdbc_data %>% select(-id) %>%
+  gather("feature", "value", -diagnosis) %>%
+  ggplot(aes(value, fill = diagnosis)) +
+  geom_density(alpha = 0.5) +
+  xlab("Feature values") +
+  ylab("Density") +
+  theme(legend.position = "top",
+        axis.text.x = element_blank(), axis.text.y = element_blank(),
+        legend.title=element_blank()) +
+  scale_fill_discrete(labels = c("Benign", "Malignant")) +
+  facet_wrap(~ feature, scales = "free", ncol = 3)
+```
+
+```{r initial-data-tidy}
+# remove id column
+wdbc_data <- wdbc_data[,-1]
+
+# convert diagnosis to a factor
+wdbc_data$diagnosis <- as.factor(wdbc_data$diagnosis)
+
+# Generate features matrix and outcome (diagnosis) list
+wdbc <- list(x = as.matrix(wdbc_data[,-1]), y = wdbc_data$diagnosis)
+```
+
+## Data wrangling
+
+The ID column is not required for this project and was removed. The diagnosis column was reclassified as categorical data using the base 'as.factor()' function, with `r nlevels(wdbc_data$diagnosis)` levels, one for benign masses (`r levels(wdbc_data$diagnosis)[1]`) and the other for malignant masses (`r levels(wdbc_data$diagnosis)[2]`).
+
+Finally, the data set was reorganised into a list including the outcomes (diagnoses) and a matrix of all of the predictors (feature measurements for each sample). Converting the numeric feature data into a matrix allows for more versatility and efficiency in both further data processing and predictive model development.
+
+## Split data into training/test sets
+
+Prior to normalising the data and exploring distance and clustering of samples and features, the data-set was split into train and test sets in an 80:20 split using the caret function 'createDataPartition' [@kuhn_2019]. This was critical to avoiding any influence of the test data (for example, in calculating the column means and standard deviations used to centre and scale the data) which could result in over-fitting the model and over-estimating the predictive accuracy of the algorithm.
+
+```{r create-train-test-sets}
+# Split into train and test sets (80:20)
+set.seed(200, sample.kind = "Rounding")
+test_index <- createDataPartition(wdbc$y, times = 1, p = 0.2, list = FALSE)
+train <- list(x = wdbc$x[-test_index,], y = wdbc$y[-test_index])
+test <- list(x = wdbc$x[test_index,], y = wdbc$y[test_index])
+```
+
+The balance of classes was consistent between the train set (malignant = `r percent(mean(train$y=="M"), accuracy = 0.1)`) and test set (malignant = `r percent(mean(test$y=="M"), accuracy = 0.1)`). Further data exploration was conducted with the train set only.
+
+```{r centre-scale-train}
+# Centre the train$x data around zero by subtracting the column mean 
+train_c <- sweep(train$x, 2, colMeans(train$x))
+
+# Scale the train$x data by dividing by the column standard deviation
+train_s <- sweep(train_c, 2, colSds(train$x), FUN = "/")
+```
+
+## Exploring train set samples
+
+```{r sample-distance}
+# Use dist function to calculate distance between each sample
+d_samples <- dist(train_s)
+
+# Average distance between all samples
+ave_dist_samples <- round(mean(as.matrix(d_samples)),2)
+
+# Distance between benign samples
+distb_b_samples <- round(mean(as.matrix(d_samples)[train$y=="B"]),2)
+
+# Distance between malignant samples
+distm_m_samples <- round(mean(as.matrix(d_samples)[train$y=="M"]),2)
+
+# Distance between benign and malignant samples
+distb_m_samples <- round(mean(as.matrix(d_samples)[train$y=="M", train$y=="B"]),2)
+```
+
+The train set was normalised using the sweep function firstly to centre each data point ($x$) around zero by subtracting the sample mean ($\overline{x}$) by column and then to scale each data point by dividing by the sample standard deviation ($S$) by column, yielding $z$-scores (1).
+
+\begin{equation}
+z = \frac{\left(x - \overline{x}\right)}{S}
+\end{equation}
+
+One way of measuring the variance between samples is to calculate the Euclidean distance, in this case in 569 (the number of samples) dimensional space. The Euclidean distance between two observations, $x_1$ and $x_2$, is defined below (2). 
+
+\begin{equation}
+d(x_1,x_2) = \sqrt{\sum_{i=1}^{569}\left(x_{1,i}-x_{2,i}\right)^2}
+\end{equation}
+
+The average distance between all samples included in the train set was `r ave_dist_samples`. Benign samples were closer to each other (`r distb_b_samples`) than to malignant samples (`r distb_m_samples`). Of note, benign samples were also closer to each other than malignant samples (`r distm_m_samples`) were from each other, indicating greater variance in the measured features in malignant cells. The heatmap shown in Figure 2 provides a visualisation of the distances between samples. A sequential palette ("Blues" from the RColorBrewer package, see @neuwirth_2014) was selected to highlight the difference between those pairings that are further from each other (dark colours) and those that are close together (light colours). The heatmap shows that samples are relatively well clustered by class (green: benign, red: malignant) and that benign samples are closest to each other (light blue hue in the bottom right quadrant) and furthest from malignant samples (more dark blue hue in the top right and bottom left quadrants).
+
+```{r heatmap-sample-dist, fig.height = 6, out.width="80%", fig.cap="Heatmap of distance between benign (green) and malignant (red) samples"}
+# Create heatmap of distance between samples
+heatmap(as.matrix(d_samples), symm = T, revC = T,
+        col = brewer.pal(4, "Blues"),
+        ColSideColors = ifelse(train$y=="B", "green", "red"),
+        RowSideColors = ifelse(train$y=="B", "green", "red"),
+        labRow = NA, labCol = NA)
+```
+
+## Exploring train set features
+
+Various techniques are available for machine learning without the supervision of the outcomes (diagnosis). These are known as unsupervised methods and can be used to cluster, select or extract features to include in the prediction algorithm. The benefit of extracting an individual feature, for example based on low variance across samples or high correlation with one or more other features is to reduce noise and processing time as well as minimising the risk of over-fitting the algorithm.
+
+### Variance within features
+
+```{r feature-variance}
+# Identifying zero variance predictors
+nzv <- nearZeroVar(train_s, saveMetrics= TRUE)
+```
+
+The nearZeroVar function within the caret package demonstrated that none of the features in the train set had either zero or near zero variance. The lowest percentage of unique values for any feature was `r min(nzv$percentUnique)` and the mean of all features was `r mean(nzv$percentUnique)`. Moreover, the mean frequency ratio was `r round(mean(nzv$freqRatio),2)` with `r percent(sum(nzv$freqRatio<=2)/length(nzv$freqRatio))` of all features having a frequency ratio score of 2 or less. This analysis supports the inclusion of all features in the algorithm based on their within feature variance.
+
+### Hierarchical clustering
+
+The train set was transposed so that the features were moved from the columns of the matrix to the rows and the dist function operated to calculate the Euclidean distance between each feature. Hierarchical clustering was performed using the hclust function from the stats package and resulted in the dendrogram shown in Figure 3 (colour coded to show 7 clusters).
+
+```{r feature-clustering, out.width="80%", fig.cap="Dendrogram of hierarchical clusters of features"}
+# Hierarchical clustering of features
+h <- hclust(dist(t(train_s)))
+
+# Create dendrogram structure from h object
+dend <- as.dendrogram(h) %>% set("branches_k_color", k = 7) %>%
+  set("labels_cex", 0.5) %>%
+  set("labels_colors", k = 7)
+
+# Create ggdend object using dendextend package to visualise with the ggplot2 package
+ggd <- as.ggdend(dend)
+
+# Plot dendrogram from ggd object using ggplot2 package
+ggplot(ggd, horiz = TRUE, theme = plot_theme) +  labs(x = "Features", y = "Distance")
+```
+
+The features that are closest together are those that measure nuclear size, including radius, perimeter and area. Those features that measure shape rather than size are further apart from each other, although concavity, compactness and the number of concave points are relatively near to each other. Fractal dimension, smoothness and symmetry are the features with the greatest distance, both from each other and the other features.
+
+### Correlation between features
+
+In addition to exploring the variance within features and the distance between features, it is helpful to understand the degree of correlation between features before deciding which features ton include in the development of a training algorithm. In particular, unsupervised methods for predictive modelling can benefit from excluding features that are highly correlated with each other from the training set. Here the Pearson correlation coefficient (3) was used to measure correlation, $r$ between two features, $x_1$ and $x_2$.
+
+\begin{equation}
+r_{x_1,x_2}=\frac{\sum_{i=1}^{n}\left(x_{1,i}-\overline{x}{_1}\right)\left(x_{2,i}-\overline{x}{_2}\right)}{\sqrt{\sum_{i=1}^{n}\left(x_{1,i}-\overline{x}{_1}\right)^2}\sqrt{\sum_{i=1}^{n}\left(x_{2,i}-\overline{x}{_2}\right)^2}}
+\end{equation}
+
+```{r feature-correlation, fig.height = 6, out.width="80%", fig.cap="Heatmap of correlation between features"}
+# Identifying correlated predictors
+trainCor <- abs(cor(train_s))
+cutoff <- 0.9
+corr_index <- findCorrelation(trainCor, cutoff = cutoff, names = FALSE)
+corr <- findCorrelation(trainCor, cutoff = cutoff, names = TRUE)
+
+# Create heatmap of correlation between features
+heatmap(as.matrix(trainCor), col = brewer.pal(9, "RdPu"), labCol = NA, showlegend = NA)
+```
+
+The heatmap in Figure 4 plots the absolute correlation coefficients between each of the 30 features included in the data-set. A sequential palette ("RdPu" from the RColorBrewer package, see @neuwirth_2014) was selected to highlight the difference between those pairings that are highly positively or negatively correlated (dark colours) and those that are not very correlated with each other (light colours).
+
+Overall, there is a low level of correlation between features; indeed, the mean correlation coefficient of features in the train set is `r round(mean(trainCor),2)`. The greatest correlation is between the various measures of cell size, namely radius, perimeter and area and, to a lesser extent between some of the measures of cell shape, namely fractal dimension, symmetry and smoothness.
+
+`r n2w(length(corr), cap = TRUE)` features have a correlation of `r cutoff` or more, namely `r combine_words(corr)`. Excluding these features from unsupervised methods of developing the predictive algorithm may be beneficial.
+
+### Principal Component Analysis
+
+```{r pca-analysis}
+# Save principal component analysis in pca object
+pca <- prcomp(train_s)
+
+# Calculate variance scores per principal component
+pca.var <- pca$sdev^2
+pca.var.per <- pca.var/sum(pca.var)
+```
+
+Principal component analysis (PCA) is a technique for transforming data-sets in order to reduce dimensionality without reducing the number of features by identifying the principal components which explain as much of the data variance as possible. PCA can be used to improve visualisation of multidimensional data and, potentially, to improve the predictive accuracy of classification models.
+
+Table 5 shows the standard deviation (Eigenvalues), proportion of variance and cumulative proportion of variance for the first 10 principal components. The first principal component (PC1) accounts for `r percent(pca.var.per[1])` of the total variance within the data-set, the first two components account for almost `r percent(sum(pca.var.per[1:2]))` of the cumulative variance and the first 10 principal components account for more than `r percent(sum(pca.var.per[1:10]))` of the cumulative variance within the data-set.
+
+```{r top-ten-pcs}
+# Create table showing the first 10 Principal Components
+summary(pca)$importance[,1:10] %>%
+  kable(caption = "First 10 Principal Components", booktabs = T, format = "latex") %>%
+  kable_styling(position = "center", latex_options = c("scale_down", "hold_position"))
+```
+
+Figure 5 is a series of box plots for each of the first 10 principal components grouped by diagnosis. In most cases the spread is greater for malignant masses than for benign masses. PC1 is the only component for which the interquartile ranges do not overlap. Principal component analysis does not take into account the classification of data, in this case the diagnosis assigned to each sample. 
+
+```{r pca-box-plot, fig.cap="Box plots of top 10 PCs by diagnosis"}
+# Create boxplot to show top 10 PCs by diagnosis
+data.frame(pca$x[,1:10], Diagnosis = train$y) %>%
+    gather(key = "PC", value = "value", -Diagnosis) %>%
+    ggplot(aes(PC, value, fill = Diagnosis)) +
+    geom_boxplot() +
+    scale_fill_discrete(name="Diagnosis",
+                        breaks=c("B", "M"),
+                        labels=c("Benign", "Malignant"))
+```
+Figure 6 is a two-dimensional scatter plot of the first two principal components, data-points coloured red if classified as benign and blue if classified as malignant. The graph shows that the malignant data-points are more spread out than the benign data-points and that more of the variance can be accounted for on the $x$-axis (PC1) than on the $y$-axis (PC2). Ellipses help to visualise this even better, firstly with a larger ellipse for malignant data-points than for benign data-points and considerable separation of data by classification, despite some overlap. This analysis support the use of PCA in algorithm development to predict diagnosis from this data-set.
+
+```{r pc1-pc2-plot, fig.cap="Scatter plot of PC1 and PC2 by diagnosis"}
+# Create scatterplot of PC1 and PC2 by diagnosis
+data.frame(pca$x[,1:2], Diagnosis = train$y) %>%
+  ggplot(aes(PC1, PC2, color = Diagnosis)) +
+  geom_point() +
+  stat_ellipse() +
+  xlab(paste("PC1: ", percent(pca.var.per[1],0.1))) +
+  ylab(paste("PC2: ", percent(pca.var.per[2],0.1))) +
+  scale_color_discrete(name="Diagnosis",
+                      breaks=c("B", "M"),
+                      labels=c("Benign", "Malignant"))
+```
+
+\newpage
+
+# **Methods**
+
+## Pre-processing
+
+The exploratory analysis of the Wisconsin breast cancer (diagnostic) data-set revealed patterns across both samples and features that support the use of machine learning techniques to develop predictive algorithms, including the use of both supervised and unsupervised models.
+
+Prior to testing any models, it was necessary to normalise the test data to reflect changes made to the train data, i.e. to centre and scale the data using the column means and standard deviations calculated from the train set. Taking this approach allowed for the test set to be normalised in a way that was consistent with the train set but without allowing the test data itself to influence the training of the algorithm.
+
+```{r centre-scale-test-set}
+## Centre the test$x data around zero by subtracting the train$x column mean 
+test_c <- sweep(test$x, 2, colMeans(train$x))
+
+## Scale the test$x data by dividing by the train$x column standard deviation
+test_s <- sweep(test_c, 2, colSds(train$x), FUN = "/")
+```
+
+An empty data frame was generated in which to store key performance metrics for each model developed, namely the overall accuracy of the model (4), the sensitivity, or true positive rate (5), the specificity, or true negative rate (6).
+
+\begin{equation}
+\mbox{Accuracy} = \frac{\mbox{True Positive}+{\mbox{True Negative}}}{\mbox{True Positive}+{\mbox{True Negative}}+{\mbox{False Positive}}+{\mbox{False Negative}}}
+\end{equation}
+
+\begin{equation}
+\mbox{Sensitivity} = \frac{\mbox{True Positive}}{\mbox{True Positive + False Positive}}
+\end{equation}
+
+\begin{equation}
+\mbox{Specificity} = \frac{\mbox{True Negative}}{{\mbox{True Negative}}+{\mbox{False Positive}}}
+\end{equation}
+
+The F1 score, a harmonic mean of precision, or positive predictive value, and sensitivity (7) is another measure of a model's accuracy and was also included. To aid analysis, the false negative rates (8) and false positive rates (9) were also computed.
+
+\begin{equation}
+\mbox{F1 score} = \frac{\mbox{2(True Positive)}}{{\mbox{2(True Positive)}}+{\mbox{False Positive}}+{\mbox{False Negative}}}
+\end{equation}
+
+\begin{equation}
+\mbox{False Negative Rate} = \frac{\mbox{False Negative}}{\mbox{False Negative + True Positive}} = \mbox{1 - Sensitivity}
+\end{equation}
+
+\begin{equation}
+\mbox{False Positive Rate} = \frac{\mbox{False Positive}}{\mbox{False Positive + True Negative}} = \mbox{1 - Specificity}
+\end{equation}
+
+```{r - test-results-data-frame}
+model_results <- data.frame(Method = character(),
+                            Accuracy = double(),
+                            Sensitivity = double(),
+                            Specificity = double(),
+                            F1 = double(),
+                            FNR = double(),
+                            FPR = double())
+```
+
+Cross-validation is an important technique used to measure performance of a model without recourse to the test data-set, allowing the test set to be reserved for the final hold-out test of each model and minimising the risk of over-fitting. It is also a useful technique for tuning parameters for those models that require it (e.g., to tune the number of neighbours, $k$, to include in a k-nearest neighbours model). The caret package provides a convenient method for cross-validation that can be defined in advance, using the 'trainControl' function and applied to each model as required [@kuhn_2019]. Here, the train control parameters were set to apply 10-fold cross-validation, repeated ten times.
+
+For the purposes of measuring performance within the resamples only the final predictions and summary performance metrics (accuracy and kappa scores) were saved based on the tuned parameters where applicable. Kappa scores are another measure of the agreement between observed ($p_o$) and expected values ($p_e$) and, unlike overall accuracy, take account of the chance that a prediction (or observed value) will match the true (or expected) value (10). Kappa scores may be negative, where the model performs less well than chance and, generally speaking, a kappa score of more than 0.8 is considered to represent very strong agreement [@landis_koch_1977].
+
+\begin{equation}
+\kappa = \frac{p_o-p_e}{1-p_e}
+\end{equation}
+
+```{r train-control}
+# Define train control parameters for appropriate models
+fitControl <- trainControl(method = "repeatedcv",
+                           number = 10, # 10-fold cross-validation
+                           repeats = 10, # repeat each cross-validation 10 times
+                           classProbs = TRUE, # class probabilities computed
+                           returnResamp = "final", # only save the final resampled summary metrics
+                           savePredictions = "final") # only save the final predictions for each resample
+```
+
+## Random sampling
+
+The first model to be tested involved random sampling with equal probability for each outcome, i.e. equivalent to a coin toss. Given the imbalance in prevalence of benign and malignant samples in the data-set, a second model was built with weighted random sampling, where the prevalence of each class of samples was used to define the probability of each outcome within the random sample.
+
+```{r random-sample}
+# Random sampling model
+
+# Probability for random sampling set to 0.5, i.e. no weighting between different outcomes
+p <- 0.5
+
+# Set seed to enable result to be reproduced
+set.seed(3, sample.kind = "Rounding")
+
+# Sample outcomes matching length and factor levels from the test set
+random_pred <- sample(c("B", "M"), length(test_index), prob = c(1-p, p), replace = TRUE) %>%
+  factor(levels = levels(test$y))
+
+# Store confusion matrix in 'random' object
+random <- confusionMatrix(random_pred, test$y, positive = "M")
+
+# Add model model results to model_results data frame
+model_results[1, ] <- c("Random sample",
+                        format(round(random$overall["Accuracy"],2), nsmall = 2),
+                        format(round(random$byClass["Sensitivity"],2), nsmall = 2),
+                        format(round(random$byClass["Specificity"],2), nsmall = 2),
+                        format(round(random$byClass["F1"],2), nsmall = 2),
+                        percent(1-(random$byClass["Sensitivity"])),
+                        percent(1-(random$byClass["Specificity"])))
+```
+
+```{r weighted-random-sample}
+# Weighted random sampling model
+
+# Probability for random sampling set to match the prevalence of benign and malignant samples in the train set
+p <- mean(train$y=="M")
+
+# Set seed to enable result to be reproduced
+set.seed(3, sample.kind = "Rounding")
+
+# Sample outcomes matching length and factor levels from the test set
+weighted_random_pred <- sample(c("B", "M"), length(test_index), prob = c(1-p, p), replace = TRUE) %>%
+  factor(levels = levels(test$y))
+
+# Store confusion matrix in 'weighted_random' object
+weighted_random <- confusionMatrix(weighted_random_pred, test$y, positive = "M")
+
+# Add model results to model_results data frame
+model_results[2, ] <- c("Weighted random sample",
+                        format(round(weighted_random$overall["Accuracy"],2), nsmall = 2),
+                        format(round(weighted_random$byClass["Sensitivity"],2), nsmall = 2),
+                        format(round(weighted_random$byClass["Specificity"],2), nsmall = 2),
+                        format(round(weighted_random$byClass["F1"],2), nsmall = 2),
+                        percent(1-(weighted_random$byClass["Sensitivity"])),
+                        percent(1-(weighted_random$byClass["Specificity"])))
+```
+
+## Unsupervised learning
+
+### k-means clustering
+
+In most cases, where labels exist to support the use of supervised models, this is the preferred option given these models will invariably yield more accurate predictions. The exploratory analysis showed that the Euclidean distance (2) between features may be predictive of outcome and that hierarchical clustering does allow for unsupervised clustering of features based on separation of data achieved based on their distance from each other. It also showed that features are relatively distinct from one another but that a few have high correlation with one another.
+
+$k$-means clustering is another form of unsupervised modelling where the number of clusters is defined in advance.  $k$-means clustering is an attractive option for large data-sets because it is a relatively simple approach to clustering and as such is computationally faster than hierarchical clustering. Given that the clustering is informed by distance, it is more effective when data are continuous, as they are in this data-set, than when the data are categorical. The first step is to develop a $k$-means prediction function which calculates the distance between data points and cluster centres by iteration in order to assign each row of data (i.e. each sample) to one of $k$ clusters, based on minimum distance to the cluster centre. Here, the number of clusters (or centres) was defined as two as there are two classes of outcome to be predicted.
+
+```{r k-means-predict-function}
+# Build k-means prediction function
+predict_kmeans <- function(x, k) {
+  # extract cluster centres
+  centres <- k$centers
+  # calculate distance from data-points to the cluster centres
+  distances <- sapply(1:nrow(x), function(i){
+    apply(centres, 1, function(y) dist(rbind(x[i,], y)))
+  })
+  # select cluster with min distance to centre
+  max.col(-t(distances))
+}
+```
+
+Two version of the $k$-means model were developed. The first used the normalised data from the full train data-set. The second selected out those features which were highly correlated, i.e. the `r n2w(length(corr))` features where the correlation coefficient exceeded the `r cutoff` cutoff defined in the exploratory analysis. $k$-means clustering places greater weight on larger clusters and variables that are highly correlated (that form a large cluster) may therefore carry greater weight in the prediction algorithm [@sambandam_2003; @biesiada_duch_2007; @chormunge_jena_2018].
+
+In each case, the number of random sets to be chosen was set at 25 using the 'nstart' argument within the 'kmeans' function. This approach helps to introduce stability to the model outcome given that it can be sensitive to the fact that the initial centre is chosen at random [@irizarry_2020].
+
+```{r k-means-full-data}
+# K-means model using full normalised data-set
+
+#Define x as normalised train dataset, train_s
+x <- train_s
+
+# Set seed to enable result to be reproduced
+set.seed(25, sample.kind = "Rounding")
+
+# Predict outcome using kmeans model with k=2 and 25 random sets
+k <- kmeans(x, centers = 2, nstart = 25)
+kmeans_pred <- factor(ifelse(predict_kmeans(test_s, k) == 1, "M", "B"))
+
+# Store confusion matrix in 'kmeans_results_1' object
+kmeans_results_1 <- confusionMatrix(kmeans_pred, test$y, positive = "M")
+
+# Add model results to model_results data frame
+model_results[3, ] <- c("K-means clustering",
+                        format(round(kmeans_results_1$overall["Accuracy"],2), nsmall = 2),
+                        format(round(kmeans_results_1$byClass["Sensitivity"],2), nsmall = 2),
+                        format(round(kmeans_results_1$byClass["Specificity"],2), nsmall = 2),
+                        format(round(kmeans_results_1$byClass["F1"],2), nsmall = 2),
+                        percent(1-(kmeans_results_1$byClass["Sensitivity"])),
+                        percent(1-(kmeans_results_1$byClass["Specificity"])))
+```
+
+```{r k-means-feature-selection}
+# K-means model with feature selection based on correlation coefficient score
+
+#Define x_select as normalised train data-set, train_s extracting those included in the corr_index based on a correlation coefficient score over the cutoff (0.9)
+x_select <- train_s[,-c(corr_index)]
+
+#Apply the same selection process to the test data-set
+test_s_select <- test_s[,-c(corr_index)]
+
+# Set seed to enable result to be reproduced
+set.seed(25, sample.kind = "Rounding")
+
+# Predict outcome using kmeans model with k=2 and 25 random sets
+k <- kmeans(x_select, centers = 2)
+kmeans_pred_2 <- factor(ifelse(predict_kmeans(test_s_select, k) == 1, "M", "B"))
+
+# Store confusion matrix in 'kmeans_results_2' object
+kmeans_results_2 <- confusionMatrix(kmeans_pred_2, test$y, positive = "M")
+
+# Add model results to model_results data frame
+model_results[4, ] <- c("K-means (without highly correlated features)",
+                        format(round(kmeans_results_2$overall["Accuracy"],2), nsmall = 2),
+                        format(round(kmeans_results_2$byClass["Sensitivity"],2), nsmall = 2),
+                        format(round(kmeans_results_2$byClass["Specificity"],2), nsmall = 2),
+                        format(round(kmeans_results_2$byClass["F1"],2), nsmall = 2),
+                        percent(1-(kmeans_results_2$byClass["Sensitivity"])),
+                        percent(1-(kmeans_results_2$byClass["Specificity"])))
+```
+
+## Supervised learning
+
+### Generative modelling
+
+Generative models are supervised machine learning techniques that model how the entire data-set, including both predictors and outcomes are distributed and use the joint probability distribution in order to predict the conditional probability of one outcome or another. The most general generative model is the Naive Bayes model which is based on the Bayes rule, where $f_{\mathbf{X}|Y=1}$ and $f_{\mathbf{X}|Y=0}$ are the distribution functions of the predictor $\mathbf{X}$ with binary outcomes, $Y=1$ and $Y=0$ (11).
+
+\begin{equation}
+p\left(\mathbf{x}\right)=\mbox{Pr}\left(Y=1|\mathbf{X}=\mathbf{x}\right)=\frac{f_{\mathbf{X}|Y=1}\left(\mathbf{x}\right)\mbox{Pr}\left(Y=1\right)}{f_{\mathbf{X}|Y=0}\left(\mathbf{x}\right)\mbox{Pr}\left(Y=0\right)+f_{\mathbf{X}|Y=1}\left(\mathbf{x}\right)\mbox{Pr}\left(Y=1\right)}
+\end{equation}
+
+The Naive Bayes model assumes that all features within the data-set are equally important and independent [@kurama_2020]. Whilst this is a naive assumption that is unlikely to be true for a given set of data, it is typically good enough for the purposes of classification [@kurama_2020]. The 'nb' method provided in the caret package includes three tuning parameters [@kuhn_2019] each of which was tuned using resampling during cross-validation of this model: laplace smoothing (0 or 1), kernel distribution (true or false)  and adjustment (0 or 1). 
+
+Other generative models include linear discriminative analysis (LDA) and quadratic discriminative analysis (QDA). LDA has the benefit of serving to reduce the dimensionality of the data (similarly to PCA) and to classify the data for predictive purposes. LDA assumes that the data are normally distributed and that the correlation structure is the same for all classes [@doring_2018].
+
+On the other hand QDA assumes that the distributions are multivariate normal, and cannot be used for dimension reduction but is more useful than LDA where different classes are known to exhibit distinct co-variances [@doring_2018]. Each of these models were developed to train the normalised train data and predict the outcome using the normalised test data. In addition, the QDA model was also run incorporating the outputs from PCA via caret's pre-processing functionality [@kuhn_2019].
+
+```{r naive-bayes}
+# Naive Bayes model
+
+# Set seed to enable result to be reproduced
+set.seed(28, sample.kind = "Rounding")
+
+# Use caret package to train and then predict outcomes using normalised train/test data-sets
+train_nb <- train(train_s, train$y, 
+                  method = "nb",
+                  tuneGrid = expand.grid(usekernel = c(FALSE, TRUE), fL = c(0, 1), adjust = c(0, 1)),
+                  trControl = fitControl)
+nb_pred <- predict(train_nb, test_s)
+
+# Store confusion matrix in 'nb_results' object
+nb_results <- confusionMatrix(nb_pred, test$y, positive = "M")
+
+# Add model results to model_results data frame
+model_results[5, ] <- c("Naive Bayes",
+                        format(round(nb_results$overall["Accuracy"],2), nsmall = 2),
+                        format(round(nb_results$byClass["Sensitivity"],2), nsmall = 2),
+                        format(round(nb_results$byClass["Specificity"],2), nsmall = 2),
+                        format(round(nb_results$byClass["F1"],2), nsmall = 2),
+                        percent(1-(nb_results$byClass["Sensitivity"])),
+                        percent(1-(nb_results$byClass["Specificity"])))
+```
+
+```{r linear-discriminant-analysis}
+# LDA model
+
+# Set seed to enable result to be reproduced
+set.seed(30, sample.kind = "Rounding")
+
+# Use caret package to train and then predict outcomes using normalised train/test data-sets
+train_lda <- train(train_s, train$y, 
+                   method = "lda", 
+                   trControl = fitControl)
+lda_pred <- predict(train_lda, test_s)
+
+# Store confusion matrix in 'lda_results' object
+lda_results <- confusionMatrix(lda_pred, test$y, positive = "M")
+
+# Add results to model_results data frame
+model_results[6, ] <- c("Linear Discriminant Analysis",
+                        format(round(lda_results$overall["Accuracy"],2), nsmall = 2),
+                        format(round(lda_results$byClass["Sensitivity"],2), nsmall = 2),
+                        format(round(lda_results$byClass["Specificity"],2), nsmall = 2),
+                        format(round(lda_results$byClass["F1"],2), nsmall = 2),
+                        percent(1-(lda_results$byClass["Sensitivity"])),
+                        percent(1-(lda_results$byClass["Specificity"])))
+```
+
+```{r quadratic-discriminant-analysis}
+# QDA model
+
+# Set seed to enable result to be reproduced
+set.seed(32, sample.kind = "Rounding")
+
+# Use caret package to train and then predict outcomes using normalised train/test data-sets
+train_qda <- train(train_s, train$y, 
+                   method = "qda", 
+                   trControl = fitControl)
+qda_pred <- predict(train_qda, test_s)
+
+# Store confusion matrix in 'qda_results' object
+qda_results <- confusionMatrix(qda_pred, test$y, positive = "M")
+
+# Add results to model_results data frame
+model_results[7, ] <- c("Quadratic Discriminant Analysis",
+                        format(round(qda_results$overall["Accuracy"],2), nsmall = 2),
+                        format(round(qda_results$byClass["Sensitivity"],2), nsmall = 2),
+                        format(round(qda_results$byClass["Specificity"],2), nsmall = 2),
+                        format(round(qda_results$byClass["F1"],2), nsmall = 2),
+                        percent(1-(qda_results$byClass["Sensitivity"])),
+                        percent(1-(qda_results$byClass["Specificity"])))
+```
+
+```{r quadratic-discriminant-analysis-pca}
+# QDA model with PCA
+
+# Set seed to enable result to be reproduced
+set.seed(32, sample.kind = "Rounding")
+
+# Use caret package to train and then predict outcomes using non-normalised train/test data-sets
+train_qda_pca <- train(train$x, train$y,
+                       method = "qda",
+                       trControl = fitControl,
+                       # Pre-processing function to centre, scale and apply pca
+                       preProcess = c("center", "scale", "pca"))
+qda_pca_pred <- predict(train_qda_pca, test$x)
+
+# Store confusion matrix in 'qda_pca_results' object
+qda_pca_results <- confusionMatrix(qda_pca_pred, test$y, positive = "M")
+
+# Add results to model_results data frame
+model_results[8, ] <- c("Quadratic Discriminant Analysis (with PCA)",
+                        format(round(qda_pca_results$overall["Accuracy"],2), nsmall = 2),
+                        format(round(qda_pca_results$byClass["Sensitivity"],2), nsmall = 2),
+                        format(round(qda_pca_results$byClass["Specificity"],2), nsmall = 2),
+                        format(round(qda_pca_results$byClass["F1"],2), nsmall = 2),
+                        percent(1-(qda_pca_results$byClass["Sensitivity"])),
+                        percent(1-(qda_pca_results$byClass["Specificity"])))
+```
+
+### Discriminative modelling
+
+#### Logistic Regression
+
+Logistic regression is the most commonly used form of generalised linear model (GLM). Linear regression assumes that the predictor, $X$, and the outcome $Y$, follow a bivariate normal distribution such that the conditional expectation, i.e. the expected outcome $Y$ for a given predictor $X$, fits the regression line (12).
+
+\begin{equation}
+p\left(x\right)=\mbox{Pr}\left(Y=1|X=x\right)=\beta_0+\beta_1x
+\end{equation}
+
+Logistic regression is an extension of linear regression, where $g$ is a function that transforms the probability, $p$, to log odds ($g(p)=log\frac{p}{1-p}$) such the conditional probability can be modelled as below (13). A logistic regression model was developed using the caret package to train the normalised train set before predicting outcomes in the normalised test set. In addition, the model was also run incorporating the outputs from PCA via caret's pre-processing functionality. Dimension reduction is most useful in highly dimensional data but there is some evidence in the literature that dimension reduction via PCA can also improve the predictive accuracy of models such as logistic regression [@hsu_2014; @sabharwal_anjum_2016].
+
+\begin{equation}
+g\left\{\mbox{Pr}\left(Y=1|X=x\right)\right\}=\beta_0+\beta_1x
+\end{equation}
+
+```{r logistic-regression}
+# Logistic regression model
+
+# Set seed to enable result to be reproduced
+set.seed(36, sample.kind = "Rounding")
+
+# Use caret package to train and then predict outcomes using normalised train/test data-sets
+train_glm <- train(train_s, train$y, 
+                   method = "glm", 
+                   trControl = fitControl)
+glm_pred <- predict(train_glm, test_s)
+
+# Store confusion matrix in 'glm_results' object
+glm_results <- confusionMatrix(glm_pred, test$y, positive = "M")
+
+# Add results to model_results data frame
+model_results[9, ] <- c("Logistic regression",
+                        format(round(glm_results$overall["Accuracy"],2), nsmall = 2),
+                        format(round(glm_results$byClass["Sensitivity"],2), nsmall = 2),
+                        format(round(glm_results$byClass["Specificity"],2), nsmall = 2),
+                        format(round(glm_results$byClass["F1"],2), nsmall = 2),
+                        percent(1-(glm_results$byClass["Sensitivity"])),
+                        percent(1-(glm_results$byClass["Specificity"])))
+```
+
+```{r logistic-regression-pca}
+# Logistic regression model with PCA
+
+# Set seed to enable result to be reproduced
+set.seed(36, sample.kind = "Rounding")
+
+# Use caret package to train and then predict outcomes using non-normalised train/test data-sets
+train_glm_pca <- train(train$x, train$y,
+                       method = "glm",
+                       trControl = fitControl,
+                       # Pre-processing function to centre, scale and apply pca
+                       preProcess = c("center", "scale", "pca"))
+glm_pca_pred <- predict(train_glm_pca, test$x)
+
+# Store confusion matrix in 'glm_pca_results' object
+glm_pca_results <- confusionMatrix(glm_pca_pred, test$y, positive = "M")
+
+# Add results to model_results data frame
+model_results[10, ] <- c("Logistic regression (with PCA)",
+                        format(round(glm_pca_results$overall["Accuracy"],2), nsmall = 2),
+                        format(round(glm_pca_results$byClass["Sensitivity"],2), nsmall = 2),
+                        format(round(glm_pca_results$byClass["Specificity"],2), nsmall = 2),
+                        format(round(glm_pca_results$byClass["F1"],2), nsmall = 2),
+                        percent(1-(glm_pca_results$byClass["Sensitivity"])),
+                        percent(1-(glm_pca_results$byClass["Specificity"])))
+```
+
+#### Nearest neighbour model
+
+The $k$-Nearest neighbour model ($k$NN) is a simple approach to supervised machine learning that assumes proximity equates to similarity, once again measuring the Euclidean distance (2) between two points in multidimensional data. Unlike hierarchical and $k$-means clustering, the KNN model is a form of supervised learning, i.e. it relies on and makes use of the diagnosis labels in the training set in order to predict diagnosis in an unlabelled test set.
+
+Whereas in $k$-means clustering, the $k$ represents the number of clusters, or centres, within the data, in the $k$NN model , $k$ represents the number of neighbours for any given data-point. As with the use of bins in smoothing, larger values of $k$ result in smoother estimates. $k$ is a tuning parameter within the train function for the $k$NN model [@kuhn_2019], and cross-validation within the train set was used to tune a value for $k$ between 1 and 30 in increments of 2 to optimise the model before using it to predict outcome in the test set.
+
+```{r k-nearest-neighbour}
+# KNN model
+
+# Set seed to enable result to be reproduced
+set.seed(5, sample.kind = "Rounding")
+
+# Use caret package to train and then predict outcomes using normalised train/test data-sets
+train_knn <- train(train_s, train$y,
+                   method = "knn",
+                   tuneGrid = data.frame(k = seq(1, 30, 2)),
+                   trControl = fitControl)
+knn_pred <- predict(train_knn, test_s)
+
+# Store confusion matrix in 'knn_results' object
+knn_results <- confusionMatrix(knn_pred, test$y, positive = "M")
+
+# Add results to model_results data frame
+model_results[11, ] <- c("K Nearest Neighbour",
+                        format(round(knn_results$overall["Accuracy"],2), nsmall = 2),
+                        format(round(knn_results$byClass["Sensitivity"],2), nsmall = 2),
+                        format(round(knn_results$byClass["Specificity"],2), nsmall = 2),
+                        format(round(knn_results$byClass["F1"],2), nsmall = 2),
+                        percent(1-(knn_results$byClass["Sensitivity"])),
+                        percent(1-(knn_results$byClass["Specificity"])))
+```
+
+#### Random forest model
+
+Many algorithms, including some of those described above, suffer from diminished performance due to multidimensionality of data. As has been described, PCA can be useful to reduce the number of dimensions required as part of pre-processing of data prior to training one of these algorithms. Decisions trees are another way to address this issue, effectively partitioning the data such that final predictions can be made on a smaller subset of predictors.
+
+One method for choosing the partition in decision trees for categorical outcome data is the Gini index. For a given proportion of observations, $\hat{p}$ in partition $j$ of class $k$ (i.e. $\hat{p}_{j,k}$), the Gini index can be defined as shown below (14).
+
+\begin{equation}
+\mbox{Gini}\left(j\right)=\sum_{k=1}^K\hat{p}_{j,k}\left(1-\hat{p}_{j,k}\right)
+\end{equation}
+
+One of the key challenges with decision trees is that they are prone to over-training and can therefore be unstable to changes in training data. Random forests address this challenge by effectively creating an ensemble ('forest') of multiple decision trees via bootstrap aggregation, and averaging the predictions from each of these trees to form a final prediction. Here, the 'rf' method within the caret package was used and the number of randomly selected predictors to include in each decision tree was tuned within the train set using the 'mtry' tuning parameter via cross-validation [@kuhn_2019]. Other random forest methods also allow for tuning of the minimum number of data-points to include in each decision tree but were not utilised here.
+
+```{r random-forest-rf}
+# Random Forest model
+
+# Set seed to enable result to be reproduced
+set.seed(7, sample.kind = "Rounding")
+
+# Use caret package to train and then predict outcomes using normalised train/test data-sets
+train_rf <- train(train_s, train$y,
+                  method = "rf",
+                  tuneGrid = data.frame(mtry = seq(3, 15, 2)),
+                  importance = TRUE,
+                  trControl = fitControl)
+rf_pred <- predict(train_rf, test_s)
+
+# Store confusion matrix in 'rf_results' object
+rf_results <- confusionMatrix(rf_pred, test$y, positive = "M")
+
+# Add results to model_results data frame
+model_results[12, ] <- c("Random Forest",
+                         format(round(rf_results$overall["Accuracy"],2), nsmall = 2),
+                         format(round(rf_results$byClass["Sensitivity"],2), nsmall = 2),
+                         format(round(rf_results$byClass["Specificity"],2), nsmall = 2),
+                         format(round(rf_results$byClass["F1"],2), nsmall = 2),
+                         percent(1-(rf_results$byClass["Sensitivity"])),
+                         percent(1-(rf_results$byClass["Specificity"])))
+```
+
+#### Neural network model
+
+Another option for dealing with multidimensional data, and particularly with non-linearity, is neural network modelling. As such, this type of algorithm has found particular application in dealing with complex machine learning tasks such as image processing, particularly with the multi-layer neural networks. The more layered the network, however, the more computational resource it requires and the greater the risk of over-fitting to a training data set [@lawrence_2000; @hayashi_1990]. The simplest forms of neural network, known as single-layer neural networks, are only equipped to deal with linear data. These algorithms take multidimensional inputs ($x_i$), apply a weighting ($w_i$) before summing them in order to classify the output $y_i$ (15).
+
+\begin{equation}
+y_i=\sum_i{w_ix_i}
+\end{equation}
+
+Neural networks can also be established for unsupervised learning but, as this project has labelled data, a supervised approach was developed using the single hidden layer neural network method, 'nnet' that is available within the caret package [@kuhn_2019]. Unlike the simplest neural network this model has three layers and, consequently, can handle non-linear data. Whilst tuning parameters to optimise the number of hidden units (size) and weight decay (decay) are available with this method, they were not deployed here.
+
+```{r neural-network}
+# Neural Network model
+
+# Set seed to enable result to be reproduced
+set.seed(9, sample.kind = "Rounding")
+
+# Use caret package to train and then predict outcomes using normalised train/test data-sets
+train_nn <- train(train_s, train$y,
+                  method = "nnet",
+                  trace = FALSE,
+                  trControl = fitControl)
+nn_pred <- predict(train_nn, test_s)
+
+# Store confusion matrix in 'nn_results' object
+nn_results <- confusionMatrix(nn_pred, test$y, positive = "M")
+
+# Add results to model_results data frame
+model_results[13, ] <- c("Neural Network",
+                        format(round(nn_results$overall["Accuracy"],2), nsmall = 2),
+                        format(round(nn_results$byClass["Sensitivity"],2), nsmall = 2),
+                        format(round(nn_results$byClass["Specificity"],2), nsmall = 2),
+                        format(round(nn_results$byClass["F1"],2), nsmall = 2),
+                        percent(1-(nn_results$byClass["Sensitivity"])),
+                        percent(1-(nn_results$byClass["Specificity"])))
+```
+
+### Ensemble model
+
+Ensembles are combinations of individual model predictions that seek to improve both stability and accuracy of the final result [@wichard_2006], just as the random forest algorithm uses combinations of individual decision trees. There is no established convention for selecting which models to include in the ensemble. One approach is to establish a performance cutoff within the training sets, via cross-validation, in order to avoid selection based on performance in the test set [@wichard_2006; @irizarry_2020]. 
+
+Here a decision was made to simply include only those algorithms that utilised supervised learning, given their inherent advantage where labelled data are available. Thus, an ensemble was created by combining the predictions from each of the naive Bayes, linear discriminant analysis, quadratic discriminant analysis (with and without principal component analysis), logistic regression (with and without PCA), $k$-nearest neighbours, random forest and neural network models. The final prediction from the ensemble was determined by majority vote.
+
+```{r ensemble-model}
+# Build ensemble model with all supervised models tested
+ensemble <- cbind(glm = ifelse(glm_pred == "B", 0, 1), glm_pca = ifelse(glm_pca_pred == "B", 0, 1), nb = ifelse(nb_pred =="B", 0, 1), lda = ifelse(lda_pred == "B", 0, 1), qda = ifelse(qda_pred == "B", 0, 1), qda_pca = ifelse(qda_pca_pred == "B", 0, 1), rf = ifelse(rf_pred == "B", 0, 1), knn = ifelse(knn_pred == "B", 0, 1), nn = ifelse(nn_pred == "B", 0, 1))
+
+# Predict final classification based on majority vote across all models, using the rowMeans function
+ensemble_preds <- as.factor(ifelse(rowMeans(ensemble) < 0.5, "B", "M"))
+
+# Store confusion matrix in 'ensemble_results' object
+ensemble_results <- confusionMatrix(ensemble_preds, test$y, positive = "M")
+
+# Add results to model_results data frame
+model_results[14, ] <- c("Ensemble",
+                        format(round(ensemble_results$overall["Accuracy"],2), nsmall = 2),
+                        format(round(ensemble_results$byClass["Sensitivity"],2), nsmall = 2),
+                        format(round(ensemble_results$byClass["Specificity"],2), nsmall = 2),
+                        format(round(ensemble_results$byClass["F1"],2), nsmall = 2),
+                        percent(1-(ensemble_results$byClass["Sensitivity"])),
+                        percent(1-(ensemble_results$byClass["Specificity"])))
+```
+
+\newpage
+
+# **Results**
+
+## Overall performance
+
+Table 6 provides the key performance metrics for each of the models tested in this project. Overall, the results confirm the expectation established during the exploratory analysis, i.e. that specificity will be easier to achieve with this data than sensitivity. `r n2w(count(model_results$Specificity=="1.00"), cap=TRUE)` models achieved a specificity of 1, but only `r n2w(count(model_results$Sensitivity=="1.00"))` of these achieved the same level of sensitivity.
+
+Unsurprisingly, guessing the outcome through random sampling was the least accurate method of predicting diagnosis, with an overall accuracy of only `r model_results[1,2]` and slightly better sensitivity (`r model_results[1,3]`) than specificity (`r model_results[1,4]`). Clearly, with `r random$table[1,2]` out of  `r random$table[1,2]+random$table[2,2]` malignant samples being incorrectly classified as benign and `r random$table[2,1]` out of `r random$table[2,1]+random$table[1,1]` benign samples being incorrectly classified as malignant, this is not an effective method for predicting diagnosis.
+
+Weighting the sampling to account for the prevalence of malignant samples within the data-set did improve specificity as anticipated (i.e. reduced the false positive rate from `r model_results[1,7]` to `r model_results[2,7]`) but dramatically reduced the sensitivity to `r model_results[2,3]` (i.e. increased the false negative rate from `r model_results[1,6]` to `r model_results[2,6]`) and as a result, in fact, reduced the overall accuracy to `r model_results[2,2]`.
+
+```{r results-table}
+# Print table of results from each model using kable
+model_results %>%
+  kable(caption = "Key performance metrics for each model", 
+        align = 'lrrrrrr',
+        booktabs = T,
+        format = "latex",
+        linesep = "") %>%
+  kable_styling(full_width = FALSE,
+                position = "center", 
+                latex_options = c("scale_down", "hold_position")) %>%
+  pack_rows(index = c("Random sampling" = 2,
+                      "Unsupervised models" = 2,
+                      "Generative models" = 4,
+                      "Discriminative models" = 5,
+                      "Ensemble" = 1)) %>%
+  footnote(general = "FNR = false negative rate; FPR = false positive rate; PCA = principal component analysis")
+```
+
+This exercise highlights the importance of balance within the data-set to the performance of classification models. It also reinforces the importance of the F1 score in evaluating performance of models dealing with imbalanced data-sets. Random sampling and weighted random sampling resulted in F1 scores of `r model_results[1,5]` and `r model_results[2,5]` respectively.
+
+$k$-means clustering improved accuracy, with an F1 score of `r model_results[3,5]` but still not to an acceptable level, with a false negative rate of `r model_results[3,6]` and a false positive rate of `r model_results[3,7]`. Of note, removing the highly correlated features (i.e. those with a correlation coefficient above `r cutoff`) from the data-set reduced the accuracy of the $k$-means clustering model, yielding a reduced F1 score of `r model_results[4,5]` and reducing both the specificity and, in particular, the sensitivity of the model.
+
+The use of supervised learning techniques substantially improved the accuracy of predictions, with each subsequent model achieving an overall accuracy of more than 0.9. Amongst the generative models, Naive Bayes achieved an overall accuracy of `r model_results[5,2]` and an F1 score of `r model_results[5,5]` with a balance of sensitivity and specificity. Of note, the Naive Bayes model performed best when the usekernel parameter was set to `r train_nb$bestTune$usekernel` and the associated adjustment was set to `r train_nb$bestTune$adjust`, which indicates that a normal (Gaussian) distribution is not the best way to estimate the conditional probabilities (see Figure 7).
+
+```{r tuning-nb-model, fig.cap = "Tuning results for naive Bayes model during cross-validation"}
+# Plot accuracy during cross-validation for tuning laplace smoothing (0/1), usekernel (true/false) and adjust (0/1)
+plot(train_nb,
+     ylab = "Accuracy (repeated cross-validation)",
+     xlab = "Laplace correction")
+```
+
+Linear discriminant analysis and quadratic discriminant analysis improved on the performance of the Naive Bayes model, with F1 scores of `r model_results[6,5]` and `r model_results[7,5]` respectively. The LDA model achieved a specificity of `r model_results[6,4]` (i.e. FPR of `r model_results[6,7]`) but this was offset by reduced sensitivity (`r model_results[6,3]`), i.e. an unacceptable FNR of `r model_results[6,6]`.
+
+The QDA model delivered a better balance between FNR (`r model_results[7,6]`) and FPR (`r model_results[7,7]`). Of note, dimension reduction through pre-processing the training data with PCA improved the specificity of the QDA model, reducing the FPR to `r model_results[8,7]` but it reduced the sensitivity, i.e. increased the FNR to `r model_results[8,6]`.
+
+The discriminative models of supervised learning were the best performing models with this data-set. Logistic regression achieved an overall accuracy of `r model_results[9,2]`. This was improved further to `r model_results[10,2]` with dimension reduction using PCA by improving the sensitivity of the model, achieving FNR and FPR of only `r model_results[10,6]` and `r model_results[10,7]` respectively.
+
+The nearest neighbours model performed best when the number of neighbours, $k$, was defined as `r n2w(train_knn$bestTune[1,1])` (see Figure 8). On this basis, the overall accuracy of `r model_results[11,2]` but with lower sensitivity (`r model_results[11,3]`).
+
+```{r tuning-knn-model, fig.cap = "Tuning results for nearest neighbour model during cross-validation"}
+# Plot accuracy during cross-validation for each value of k (number of neighbours) tuned
+plot(train_knn,
+     ylab = "Accuracy (repeated cross-validation)",
+     xlab = "# Neighbours (k)")
+```
+
+The random forest model was not very sensitive to the number of randomly selected predictors included in each decision tree it was tuned for, but performed marginally best when mtry was `r train_rf$bestTune[1,1]` (see Figure 9), with overall accuracy of `r model_results[12,2]`, sensitivity of `r model_results[12,3]` and specificity of `r model_results[12,4]`.
+
+```{r tuning-rf-model, fig.cap = "Tuning results for random forest model during cross-validation"}
+#Change number of digits to 4 to aid reading y-axis of plot
+options(digits = 4)
+# Plot accuracy during cross-validation for each value of mtry (number of neighbours) tuned
+plot(train_rf,
+     ylab = "Accuracy (repeated cross-validation)",
+     xlab = "# Randomly selected predictors (mtry)")
+```
+
+The final individual model to be  trained and tested was the neural network. This performed very well with an overall accuracy of `r model_results[13,2]` and an F1 score of `r model_results[13,5]`. Finally an ensemble of all of the supervised learning models, including both generative and discriminative approaches, also delivered an overall accuracy of `r model_results[14,2]` and an F1 score of `r model_results[14,5]`.
+
+## Cross-validation
+
+Figure 10 provides dot plots summarising the accuracy and Kappa scores for each of the supervised learning models for which cross-validation was conducted, ranked in order of performance. Overall, these results are consistent with those observed in the test set predictions; the neural network was the highest performing model followed by logistic regression with PCA and the random forest model.
+
+```{r train-cross-validation, fig.cap="Dot plots of accuracy and kappa scores from training resamples"}
+# Generate character string of models to be included in resampling analysis
+modelNames <-  c("Naive Bayes", "Linear Discriminant Analysis", "Quadratic Discriminant Analysis", "Quadratic Discriminant Analysis with PCA", "Logistic Regression", "Logistic Regression with PCA", "K Nearest Neighbours", "Random Forest", "Neural Network")
+
+# Generate list of results of cross-validation of training sets with each of these models
+modelTrains <- list(train_nb, train_lda, train_qda, train_qda_pca, train_glm, train_glm_pca, train_knn, train_rf, train_nn)
+
+# Use the resamples function to compare performance during cross-validation, ranking them in order of performance
+model_compare <- resamples(modelTrains, modelNames = modelNames, decreasing = TRUE)
+
+# Plot dot plots to show accuracy and kappa scores for each model
+dotplot(model_compare)
+```
+
+Mean accuracy scores were consistently above 0.9 for all models, with the lowest mean accuracy achieved by logistic regression (mean: `r round(mean(model_compare$values$"Logistic Regression~Accuracy"),2)`) and the highest for the neural network model (mean: `r round(mean(model_compare$values$"Neural Network~Accuracy"),2)`) and logistic regression with PCA (mean: `r round(mean(model_compare$values$"Logistic Regression with PCA~Accuracy"),2)`).
+
+Mean kappa scores were consistently lower but were still above 0.8 for all models, and above 0.9 for logistic regression with PCA (mean: `r round(mean(model_compare$values$"Logistic Regression with PCA~Kappa"),2)`) and for the nearest neighbours (mean: `r round(mean(model_compare$values$"K Nearest Neighbours~Kappa"),2)`), random forest (mean: `r round(mean(model_compare$values$"Random Forest~Kappa"),2)` and neural network (mean: `r round(mean(model_compare$values$"Neural Network~Kappa"),2)` models. In all bar the Naive Bayes model, the accuracy scores achieved during cross-validation did not exceed those achieved in the final predictions run within the test set, indicating that over-fitting of algorithms during training was not a major concern, and providing confidence that model performance would be sustained beyond the current data-set.
+
+Of note, pre-processing with principal component analysis was shown to improve the performance of quadratic discriminant analysis and, in particular, logistic regression. The latter achieved the lowest mean accuracy and kappa scores without PCA (mean accuracy: `r round(mean(model_compare$values$"Logistic Regression~Accuracy"),2)`, mean kappa: `r round(mean(model_compare$values$"Logistic Regression~Kappa"),2)`) compared with the highest mean scores with PCA (mean accuracy: `r round(mean(model_compare$values$"Logistic Regression with PCA~Accuracy"),2)`, mean kappa: `r round(mean(model_compare$values$"Logistic Regression with PCA~Kappa"),2)`).
+
+## Variable importance
+
+```{r variable-importance, fig.ncol = 2, out.width = "50%", fig.align = "center", fig.cap = "Variable importance", fig.subcap=c("K Nearest Neighbours (metric: ROC curve)", "Random Forest (metric: model specific)", "Neural Network (metric: model specific)", "Logistic Regression (metric: model specific)")}
+
+# Create varImp objects for each of the nearest neighbour, random forest, neural network and logistic regression models
+varimp_knn <- (varImp(train_knn))
+varimp_rf <- (varImp(train_rf))
+varimp_nn <- (varImp(train_nn))
+varimp_glm <- (varImp(train_glm))
+
+# Define the number of variables to include in plots ranked by importance
+top <- 10
+
+# Generate variable importance plots for each of the varImp objects
+plot(varimp_knn, top = top)
+plot(varimp_rf, top = top) 
+plot(varimp_nn, top = top) 
+plot(varimp_glm, top = top)
+```
+
+The caret package includes the 'varImp' function to compute the importance of each feature to the performance of the model during cross-validation within the training data-set [@kuhn_2019]. The top `r n2w(top)` features in order of variable importance for the nearest neighbours, random forest, neural network and logistic regression models are shown in Figure 11. The importance scores are scaled to aid comparison across models, such that the most important feature received a score of 100.
+
+The worst performing discriminative model, logistic regression appears to be most reliant on mean and standard error scores for features related to nuclear shape in the top five variables of importance, namely, `r combine_words(varimp_glm$importance %>% top_n(5) %>% rownames())`.
+
+Looking at the best performing models, by comparison, the worst scores feature heavily in the top five variables of importance for the nearest neighbour model (`r varimp_knn$importance %>% top_n(5) %>% rownames() %>% str_detect(pattern = "_w") %>% sum()` out of 5), the random forest model (`r varimp_rf$importance %>% top_n(5) %>% rownames() %>% str_detect(pattern = "_w") %>% sum()` out of 5) and the neural network model (`r varimp_nn$importance %>% top_n(5) %>% rownames() %>% str_detect(pattern = "_w") %>% sum()` out of 5).
+
+The top 5 most important features were the same in both the nearest neighbour model (`r combine_words(varimp_knn$importance %>% top_n(5) %>% rownames())`) and the random forest model (`r combine_words(varimp_rf$importance %>% top_n(5) %>% rownames())`). In contrast, the most important variables in the neural network model were `r combine_words(varimp_nn$importance %>% top_n(5) %>% rownames())`. These findings suggest that the different models rely on different patterns within the data and may be complementary, and supports the use of ensembles for making final predictions.
+
+# **Discussion**
+
+All of the models developed as part of this project improved the accuracy of diagnosis prediction compared to guessing based on random sampling, thus validating the features selected by the original investigators as useful predictors of malignancy. This was even true for $k$-means clustering, without the benefit of using labelled training data to direct classification. High correlation between variables can hinder the performance of unsupervised clustering methods because they add weight to those data that are collinear [@sambandam_2003].  However, removal of highly correlated features reduced the accuracy of $k$-means clustering with this data set indicating that the predictive value of the data was diminished by the removal of these features.
+
+Supervised learning is invariably more effective than unsupervised learning and this was also the case in this project. The various supervised learning methods delivered high levels of overall accuracy and F1 scores (all above 90%) reflecting good performance in terms of both sensitivity and specificity. Discriminative models are generally preferred to generative models for developing classification algorithms [@NIPS2001_2020] and they performed better here, with the naive Bayes model in particular underperforming the other supervised learning algorithms.
+
+Principal component analysis is a highly effective method for reducing the number of dimensions without a proportional loss in the variance within the data and can help improve the computational efficiency of models with very large data sets. Arguably, this particular data set, with 30 features and 569 samples is not large enough to need an improvement in efficiency. That said, the analysis demonstrated that dimension reduction can be achieved such that selecting the top third of principal components only lost 5% of the variance within the data. Two of the models were subjected to dimension reduction via PCA using pre-processing; in the case of quadratic discriminant analysis, specificity was improved but this was offset by reduced sensitivity. On the other hand, PCA maintained the perfect specificity and improved the sensitivity of logistic regression, thus improving overall accuracy to `r model_results[10,2]`. Logistic regression is vulnerable to high levels of correlation between multiple variables as well as the effects of high dimensionality, both of which can be alleviated using PCA [@aguilera_2006].
+
+The nearest neighbours and random forest models were both tuned using tuning parameters available within the caret package in order to optimise their performance but were otherwise not subjected to additional data pre-processing. The nearest neighbours model performs less well with imbalanced data because of its reliance on distance between data points in order to discriminate between classes. In particular, this can reduce the sensitivity of the model to detecting the minority class as evidenced by the fact that this model had perfect specificity but a `r model_results[11,6]` false negative rate. The class confidence weighted kNN algorithm is one approach to overcoming the effect of class imbalance [@liu_2011] and could be used to improve the performance of the model deployed in this project. The random forest model was tuned to the number of randomly selected predictors per decision tree with only marginal impact on performance as measured by overall accuracy. Other random forest packages such as Rborist allow for models to be tuned to the minimal node size during training as well [@kuhn_2019]. This method was not utilised, in order to limit the already considerable processing time required to train the random forest model.
+
+The neural network was the only individual model to correctly predicted the diagnosis for each of the samples in the test set. Neural networks are particularly strong with non-linear and complex data hence their popularity with image processing. Of note, the variable importance analysis showed the shape features were more important with this model whereas the size features dominated the nearest neighbour and random forest models. The apparent ability of the neural network to identify predictive patterns within the shape features may have contributed to its greater sensitivity to diagnosing malignancy in some samples; this hypothesis generating finding warrants further investigation.
+
+Despite the success of the neural network, there is merit in selecting the ensemble of supervised models as the preferred algorithm given that it also correctly predicted diagnosis and has the benefit of mitigating the risk of over-training with an individual model, making it more likely to provide reproducible results in different data-sets that include the same feature information.
+
+The current dataset suffers from a number of inherent biases that represent possible limitations to the reproducibilty of the performance achieved here. The samples were collected from a single site and from a consecutive series of patients. Operator biases will have included those responsible for conducting the biopsies, digitising the images to measure each of the features and even the clinical diagnoses made to classify each sample as benign or malignant. The methods for capturing nuclear size and shape information in 1995 were relatively rudimentary and more advanced image processing techniques available today would complement the complex machine learning algorithms (such as convolutional neural networking) now available to capture differences between benign and malignant samples.
+
+Finally, the growing knowledge of cancer biomarkers as well as the characterisation of circulating tumour cells has contributed to advances in the use of liquid biopsy as a less invasive clinical tool than conventional biopsy techniques [@alix-panabieres_2020]. These advances provide a richness of data that is tailor made for machine learning [@mouratidis_2019; @savage_2020], not only for diagnosis of primary disease but also to measure prognostic risk, in order to shape treatment choice, and to detect recurrence of metastatic disease [@derubis_2019].
+
+# **Conclusions**
+
+The objective of this project was to use the Wisconsin breast cancer data set to train different algorithms to accurately diagnosis breast cancer. An exploratory analysis of the data revealed that measures of both distance and correlation of nuclear features could be useful in both clustering and classifying individual samples. All of the models developed performed better than random sampling but supervised learning was more accurate than unsupervised learning, and discriminative models were more effective than generative models. The neural network was the most successful individual model, with perfect accuracy within the test data and this performance was matched with an ensemble of supervised models.
+
+These results confirm the potential of machine learning to accurately predict diagnosis of breast cancer using samples obtained via fine needle aspiration biopsy, with high levels of both sensitivity and specificity.
+
+Advances in both medical research and data science, such as developments in the use liquid biopsy and the refinement of image processing techniques, are likely to increase the clinical utility of machine learning to support early diagnosis of breast cancer and, ultimately, to improve patient outcomes.
+
+\newpage
+
+# References
